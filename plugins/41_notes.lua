@@ -80,8 +80,10 @@ end
 --- only the tool differs by platform, so try them in order and take the first
 --- that answers: PowerShell under WSL/Windows, wl-paste on Wayland, xclip/xsel on
 --- X11, pbpaste on macOS. A missing tool exits non-zero and the next one runs.
+--- `Get-Clipboard` writes in the console's OEM code page (CP866 for Cyrillic), so
+--- it is forced to UTF-8 first — otherwise non-ASCII comes back as mojibake.
 local CLIP_CMD = table.concat({
-  "powershell.exe -NoProfile -Command Get-Clipboard 2>/dev/null",
+  'powershell.exe -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard" 2>/dev/null',
   "wl-paste --no-newline 2>/dev/null",
   "xclip -selection clipboard -o 2>/dev/null",
   "xsel -b 2>/dev/null",
