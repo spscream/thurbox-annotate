@@ -34,6 +34,10 @@ cat >"$OUT/plugins.toml" <<'SPEC'
 [[plugin]]
 src = "git+https://github.com/spscream/thurbox-annotate"
 file = "thurbox-annotate/plugins/40_annotate.lua"
+
+[[plugin]]
+src = "git+https://github.com/spscream/thurbox-annotate"
+file = "thurbox-annotate/plugins/41_notes.lua"
 SPEC
 
 echo "assembled $OUT"

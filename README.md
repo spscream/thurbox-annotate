@@ -6,13 +6,20 @@
 
 Review a coding agent's output inside [thurbox](https://github.com/Thurbeen/thurbox)
 and send it numbered feedback — the [herdr-annotate](https://github.com/plannotator/herdr-annotate)
-idea, wired into thurbox's own panes.
+idea, wired into thurbox's own panes. It comes in two tiers, like herdr:
 
-Press a key on any session and its terminal output opens in
-[plannotator-tui](https://github.com/plannotator/plannotator-tui): drag to select
-a line, comment on it, and press `E`. The comments are delivered straight back
-into that agent's composer as a numbered list — as if you had typed the review
-yourself.
+- **Full** — press a key on any session and its terminal output opens in
+  [plannotator-tui](https://github.com/plannotator/plannotator-tui): drag to
+  select a line, comment on it, and press `E`. The comments are delivered
+  straight back into that agent's composer as a numbered list — as if you had
+  typed the review yourself.
+- **Lite** — no external program. Drag to select a line in the agent, press
+  `F7`, type a comment; repeat to build a list, then send it all back with `E`.
+  A single small pane, entirely in Lua.
+
+Either tier delivers the same thing: a numbered review typed into the agent's
+composer. Full renders the source as a document to annotate; Lite is a lighter
+in-terminal notepad against the live selection.
 
 ![Reviewing a stub agent's plan and sending the feedback back](media/demo.gif)
 
@@ -21,10 +28,12 @@ numbered feedback lands in the agent's composer, which echoes it straight back.*
 
 | Pane | Slot | What it draws |
 |---|---|---|
-| `plugins/40_annotate.lua` | `center` (switch) | A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
+| `plugins/40_annotate.lua` | `center` (switch) | **Full tier.** A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
+| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the mouse selection, a comment on it, an accumulating list. Comment on the selection with `F7` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
 
-It shares the `center` slot with the agent pane and draws nothing until you bring
-it forward, so it adds no column and needs **no `layout.lua` edit**.
+Both share the `center` slot with the agent pane and draw nothing until you bring
+one forward, so they add no column and need **no `layout.lua` edit**. Install
+only the tier you want — the two are independent.
 
 ## How it works
 
@@ -77,6 +86,32 @@ of a terminal.
 3. Drag to select a line, comment, repeat.
 4. Press `E` — the numbered feedback lands in that agent's composer.
 5. `F5` again closes the review and hands focus back.
+
+## Lite tier
+
+`plugins/41_notes.lua` is the whole tier — no binary, no capability. Install it
+the same way:
+
+```bash
+thurbox-cli plugin install git+https://github.com/spscream/thurbox-annotate --as plugins/41_notes.lua
+```
+
+Then:
+
+1. Drag to select a line of the agent's output.
+2. Press `F7` — the pane comes forward with that line quoted and a comment
+   field. Type the comment, press `Enter` to save it. The chord is global, so it
+   fires while the agent is focused; the selection is grabbed at the keypress.
+3. Repeat to build the list. `d` clears it.
+4. Press `E` — the accumulated notes are typed into the selected session's
+   composer as numbered feedback, the same delivery the Full tier uses.
+
+**Requires a thurbox that publishes the selection.** The pane reads the mouse
+selection from the shared store key `selection.text`. Stock thurbox keeps the
+selection only for its own copy, so on an unpatched build the selection is always
+empty and `F7` has nothing to quote. The one-line kernel change that exposes it
+(`feat(core): mirror the text selection into the shared store for Lua panes`)
+lives on the fork and is not yet upstream; the Full tier needs no such change.
 
 ## Checks
 
