@@ -162,22 +162,11 @@ local function snippet(quote, width)
   return widgets.truncate(line, limit)
 end
 
---- How many rows the FULL quote needs at `cols` columns, so the compose view can
---- show it whole (with the node's own word-wrap) instead of a one-line snippet.
---- Capped at `cap` so a large paste cannot push the comment field off-screen —
---- the whole quote is still stored and delivered, this only bounds the preview.
---- The estimate is char-wrap (`ceil(width/cols)` per hard line) plus one row of
---- head-room, since word-wrap breaks earlier than a raw column cut and would
---- otherwise clip the last word; that spare row doubles as the gap to the field.
+--- Ceiling on how many quote lines the compose view shows before it spends the
+--- last row on a "+N more" count — so a large paste cannot push the comment field
+--- off-screen. Only the preview is bounded; the whole quote is stored and
+--- delivered. Clamped again to the pane height at render.
 local QUOTE_MAX_ROWS = 8
-local function quote_rows(quote, cols, cap)
-  cols = math.max(1, cols)
-  local rows = 0
-  for line in (quote .. "\n"):gmatch("(.-)\n") do
-    rows = rows + math.max(1, math.ceil(widgets.len(line) / cols))
-  end
-  return math.max(1, math.min(rows + 1, cap or QUOTE_MAX_ROWS))
-end
 
 --- Which list the cursor is over, and its name — `state` is deserialised on each
 --- read, so callers take the returned list, mutate it, and write it BACK under
@@ -299,27 +288,34 @@ return {
     if state.composing then
       local quote = pending_quote()
       if quote then
-        -- The whole selection, wrapped, sitting right above the field — not a
-        -- one-line snippet. Height is content-sized (capped) so the field stays
-        -- put; a 2-column indent box carries the same left margin to every
-        -- wrapped line.
+        -- The whole selection shown verbatim, line by line — breaks and
+        -- indentation kept (a code selection reads as code), never reflowed the
+        -- way `wrap` would. Each source line is its own row under a 2-column
+        -- margin; the painter clips a line too wide for the pane. Capped so a
+        -- large paste cannot push the field off-screen — the whole quote is still
+        -- stored and delivered — with the last row spent on a count of the rest.
         children[#children + 1] = { type = "text", len = 1, text = theme.dim("  on:") }
-        local cols = math.max(1, ctx.width - 4)
         local cap = math.max(1, math.min(QUOTE_MAX_ROWS, (ctx.height or 24) - 6))
-        children[#children + 1] = {
-          type = "box",
-          axis = "horizontal",
-          len = quote_rows(quote, cols, cap),
-          children = {
-            { type = "text", len = 2, text = "" },
-            {
-              type = "text",
-              fill = 1,
-              wrap = true,
-              text = { { { text = quote, style = { fg = theme.accent } } } },
-            },
-          },
-        }
+        local lines = {}
+        for line in (normalize_block(quote) .. "\n"):gmatch("(.-)\n") do
+          lines[#lines + 1] = line
+        end
+        local shown, more = #lines, 0
+        if shown > cap then
+          shown = math.max(1, cap - 1)
+          more = #lines - shown
+        end
+        for j = 1, shown do
+          children[#children + 1] = {
+            type = "text",
+            len = 1,
+            text = { { { text = "  " .. lines[j], style = { fg = theme.accent } } } },
+          }
+        end
+        if more > 0 then
+          children[#children + 1] =
+            { type = "text", len = 1, text = theme.dim("  … +" .. more .. " more line(s)") }
+        end
       else
         local caption
         if not run and type(state.clip_key) == "string" then
