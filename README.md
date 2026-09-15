@@ -29,7 +29,7 @@ numbered feedback lands in the agent's composer, which echoes it straight back.*
 | Pane | Slot | What it draws |
 |---|---|---|
 | `plugins/40_annotate.lua` | `center` (switch) | **Full tier.** A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
-| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the mouse selection, a comment on it, an accumulating list. Comment on the selection with `F7` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
+| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the mouse selection, a comment on it, an accumulating list you classify (`c`), delete (`x`) and archive (`a`/`Tab`/`u`). Comment on the selection with `F7` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
 
 Both share the `center` slot with the agent pane and draw nothing until you bring
 one forward, so they add no column and need **no `layout.lua` edit**. Install
@@ -102,9 +102,14 @@ Then:
 2. Press `F7` — the pane comes forward with that line quoted and a comment
    field. Type the comment, press `Enter` to save it. The chord is global, so it
    fires while the agent is focused; the selection is grabbed at the keypress.
-3. Repeat to build the list. `d` clears it.
-4. Press `E` — the accumulated notes are typed into the selected session's
-   composer as numbered feedback, the same delivery the Full tier uses.
+3. Repeat to build the list, then manage it — a cursor moves with `j`/`k`; `c`
+   cycles the selected note's classification (Issue / Suggestion / Note /
+   Praise); `x` deletes it; `a` archives it and `Tab` shows the archive, where
+   `u` restores. `d` clears the current list. This mirrors herdr-annotate's
+   `Ctrl+B M` manager, minus the clipboard export the Lua sandbox cannot reach.
+4. Press `E` — the active notes are typed into the selected session's composer
+   as numbered, classified feedback (`[Issue] > quote`), the same delivery the
+   Full tier uses. The archive stays behind; only the review is sent.
 
 **Requires a thurbox that publishes the selection.** The pane reads the mouse
 selection from the shared store key `selection.text`. Stock thurbox keeps the

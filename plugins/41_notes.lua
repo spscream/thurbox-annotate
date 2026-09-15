@@ -12,6 +12,11 @@
 -- Delivery is `command("send")`, the same route the agent's composer receives a
 -- prompt on, so a real agent reads the review as if you had typed it. No
 -- capability is needed: unlike the Full tier there is no external program to run.
+--
+-- The list is a small manager, mirroring herdr-annotate's `Ctrl+B M`: a cursor
+-- (j/k) selects a note, `c` cycles its classification, `x` deletes it, `a`
+-- archives it and `Tab` shows the archive where `u` restores. Only the active
+-- notes are sent; the archive is a holding area, not part of the review.
 
 local theme = require("lib.theme")
 local widgets = require("lib.widgets")
@@ -19,6 +24,24 @@ local textinput = require("lib.textinput")
 
 local NAME = "notes"
 local SELECTION = "selection.text"
+
+--- The classifications a note can carry, in cycle order, with `note` the
+--- default — the same set herdr-annotate and thurbox-code-review use.
+local CLASSES = { "issue", "suggestion", "note", "praise" }
+local CLASS_LABEL = { issue = "Issue", suggestion = "Suggestion", note = "Note", praise = "Praise" }
+--- Class → theme ROLE name, resolved inside `render` (never captured at load, or
+--- the colour would freeze across a theme switch). Falls back to `text`.
+local CLASS_ROLE = { issue = "error", suggestion = "warn", note = "muted", praise = "ok" }
+
+--- The next class in the cycle, wrapping — herdr's `Classification::next`.
+local function next_class(class)
+  for i, name in ipairs(CLASSES) do
+    if name == class then
+      return CLASSES[i % #CLASSES + 1]
+    end
+  end
+  return CLASSES[1]
+end
 
 --- The session the notes are sent to: whatever the list has selected, the same
 --- one the agent pane shows.
@@ -57,14 +80,35 @@ local function snippet(quote, width)
   return line
 end
 
+--- Which list the cursor is over, and its name — `state` is deserialised on each
+--- read, so callers take the returned list, mutate it, and write it BACK under
+--- the returned key (see the write-back trap the whole pane is careful about).
+local function view_of()
+  return state.view == "archived" and "archived" or "notes"
+end
+
+local function list_of(view)
+  if view == "archived" then
+    return state.archived or {}
+  end
+  return state.notes or {}
+end
+
+--- The cursor clamped to the list — 1 even when empty, so a row index never
+--- points past the end after a delete or an archive.
+local function cursor_in(list)
+  return math.max(1, math.min(state.cursor or 1, math.max(1, #list)))
+end
+
 --- The accumulated notes as numbered feedback for a composer. Plain text, since
---- that is what lands in the agent — each note is the quoted line and the comment
---- under it.
+--- that is what lands in the agent — each note is the classified quote and the
+--- comment under it.
 local function to_feedback(notes)
   local out = { "Review notes:", "" }
   for i, note in ipairs(notes) do
     local quote = (note.quote:gsub("%s+", " ")):gsub("^%s+", "")
-    out[#out + 1] = i .. ". > " .. quote
+    local label = CLASS_LABEL[note.class or "note"] or "Note"
+    out[#out + 1] = i .. ". [" .. label .. "] > " .. quote
     out[#out + 1] = "   " .. note.comment
     out[#out + 1] = ""
   end
@@ -72,7 +116,8 @@ local function to_feedback(notes)
 end
 
 --- Deliver the accumulated notes to the selected session's composer, or explain
---- why it cannot. Shared by the `E` key and the `notes.send` action.
+--- why it cannot. Shared by the `E` key and the `notes.send` action. Only the
+--- active notes travel — the archive is deliberately left out.
 local function send_notes()
   local notes = state.notes or {}
   if #notes == 0 then
@@ -121,8 +166,12 @@ return {
   },
 
   render = function(ctx)
-    local notes = state.notes or {}
-    local title = #notes > 0 and ("Notes · " .. #notes) or "Notes"
+    local view = view_of()
+    local list = list_of(view)
+    local cursor = cursor_in(list)
+    local archived = state.archived or {}
+    local title = view == "archived" and ("Archived · " .. #archived)
+      or (#list > 0 and ("Notes · " .. #list) or "Notes")
     local children = { { type = "text", len = 1, text = "" } }
 
     if state.composing then
@@ -151,19 +200,33 @@ return {
       children[#children + 1] = { type = "text", len = 1, text = "" }
     end
 
-    if #notes == 0 and not state.composing then
-      local sel = selection()
-      local hint = sel and ('press F7 to comment on "' .. snippet(sel, ctx.width) .. '"')
-        or "select a line in the agent, then press F7 to comment on it"
+    if #list == 0 and not state.composing then
+      local hint
+      if view == "archived" then
+        hint = "no archived notes — Tab returns to the review"
+      else
+        local sel = selection()
+        hint = sel and ('press F7 to comment on "' .. snippet(sel, ctx.width) .. '"')
+          or "select a line in the agent, then press F7 to comment on it"
+      end
       children[#children + 1] = { type = "text", text = theme.dim("  " .. hint) }
     end
 
-    for i, note in ipairs(notes) do
+    for i, note in ipairs(list) do
+      local selected = i == cursor
+      local marker = selected and "▸ " or "  "
+      local label = CLASS_LABEL[note.class or "note"] or "Note"
+      local class_fg = theme[CLASS_ROLE[note.class or "note"]] or theme.text
       children[#children + 1] = {
         type = "text",
         text = {
           {
-            { text = "  " .. i .. '. "', style = { fg = theme.muted } },
+            {
+              text = marker .. i .. ". ",
+              style = { fg = selected and theme.accent or theme.muted },
+            },
+            { text = "[" .. label .. "] ", style = { fg = class_fg } },
+            { text = '"', style = { fg = theme.muted } },
             { text = snippet(note.quote, ctx.width), style = { fg = theme.accent } },
             { text = '"', style = { fg = theme.muted } },
           },
@@ -176,10 +239,17 @@ return {
     end
 
     children[#children + 1] = { type = "text", fill = 1, text = "" }
-    if #notes > 0 then
+    if view == "archived" then
       children[#children + 1] = {
         type = "text",
-        text = theme.dim("  F7 comment · E send · d clear"),
+        text = theme.dim("  j/k move · u restore · x delete · Tab review"),
+      }
+    elseif #list > 0 then
+      children[#children + 1] = {
+        type = "text",
+        text = theme.dim(
+          "  F7 comment · j/k move · c class · x del · a archive · Tab archive · E send"
+        ),
       }
     end
 
@@ -200,8 +270,11 @@ return {
         local comment = (field.value or ""):gsub("^%s+", ""):gsub("%s+$", "")
         if comment ~= "" then
           local notes = state.notes or {}
-          notes[#notes + 1] = { quote = state.pending_quote or "", comment = comment }
+          notes[#notes + 1] =
+            { quote = state.pending_quote or "", comment = comment, class = "note" }
           state.notes = notes
+          state.view = "notes"
+          state.cursor = #notes
         end
         state.composing = false
         state.field = textinput.new("")
@@ -219,15 +292,101 @@ return {
       return true
     end
 
-    -- Not composing: the list's own keys. `E` (shift) sends, `d` clears.
+    -- Not composing: the list manager. `E` (shift) sends the active notes.
     if key.char == "E" then
       send_notes()
       return true
     end
-    if key.key == "d" then
-      state.notes = {}
+
+    local view = view_of()
+    local list = list_of(view)
+    local cursor = cursor_in(list)
+
+    -- Move the cursor, when there is a list to move over.
+    if key.key == "j" or key.key == "down" then
+      if #list > 0 then
+        state.cursor = math.min(cursor + 1, #list)
+      end
       return true
     end
+    if key.key == "k" or key.key == "up" then
+      if #list > 0 then
+        state.cursor = math.max(cursor - 1, 1)
+      end
+      return true
+    end
+
+    -- Show the review or the archive.
+    if key.key == "tab" then
+      state.view = view == "notes" and "archived" or "notes"
+      state.cursor = 1
+      return true
+    end
+
+    -- Cycle the selected note's classification (active notes only).
+    if key.key == "c" and view == "notes" then
+      local notes = state.notes or {}
+      local note = notes[cursor]
+      if note then
+        note.class = next_class(note.class or "note")
+        state.notes = notes
+      end
+      return true
+    end
+
+    -- Archive the selected note: out of the review, into the holding area.
+    if key.key == "a" and view == "notes" then
+      local notes = state.notes or {}
+      local note = table.remove(notes, cursor)
+      if note then
+        local arch = state.archived or {}
+        arch[#arch + 1] = note
+        state.notes = notes
+        state.archived = arch
+        state.cursor = math.min(cursor, math.max(1, #notes))
+      end
+      return true
+    end
+
+    -- Restore the selected archived note back into the review.
+    if key.key == "u" and view == "archived" then
+      local arch = state.archived or {}
+      local note = table.remove(arch, cursor)
+      if note then
+        local notes = state.notes or {}
+        notes[#notes + 1] = note
+        state.archived = arch
+        state.notes = notes
+        state.cursor = math.min(cursor, math.max(1, #arch))
+      end
+      return true
+    end
+
+    -- Delete the selected note from whichever list the cursor is over.
+    if key.key == "x" then
+      if #list > 0 then
+        table.remove(list, cursor)
+        if view == "archived" then
+          state.archived = list
+        else
+          state.notes = list
+        end
+        state.cursor = math.min(cursor, math.max(1, #list))
+      end
+      return true
+    end
+
+    -- Clear the whole current list — the convenience herdr leaves to archiving.
+    if key.key == "d" then
+      if view == "archived" then
+        state.archived = {}
+      else
+        state.notes = {}
+      end
+      state.cursor = 1
+      return true
+    end
+
     return false
   end,
 
