@@ -147,6 +147,23 @@ local function snippet(quote, width)
   return widgets.truncate(line, limit)
 end
 
+--- How many rows the FULL quote needs at `cols` columns, so the compose view can
+--- show it whole (with the node's own word-wrap) instead of a one-line snippet.
+--- Capped at `cap` so a large paste cannot push the comment field off-screen —
+--- the whole quote is still stored and delivered, this only bounds the preview.
+--- The estimate is char-wrap (`ceil(width/cols)` per hard line) plus one row of
+--- head-room, since word-wrap breaks earlier than a raw column cut and would
+--- otherwise clip the last word; that spare row doubles as the gap to the field.
+local QUOTE_MAX_ROWS = 8
+local function quote_rows(quote, cols, cap)
+  cols = math.max(1, cols)
+  local rows = 0
+  for line in (quote .. "\n"):gmatch("(.-)\n") do
+    rows = rows + math.max(1, math.ceil(widgets.len(line) / cols))
+  end
+  return math.max(1, math.min(rows + 1, cap or QUOTE_MAX_ROWS))
+end
+
 --- Which list the cursor is over, and its name — `state` is deserialised on each
 --- read, so callers take the returned list, mutate it, and write it BACK under
 --- the returned key (see the write-back trap the whole pane is careful about).
@@ -253,17 +270,39 @@ return {
 
     if state.composing then
       local quote = pending_quote()
-      local caption
       if quote then
-        caption = 'on "' .. snippet(quote, ctx.width) .. '"'
-      elseif not run and type(state.clip_key) == "string" then
-        caption = "grant 'run' (Ctrl+, → ] → t) to read the clipboard"
-      elseif clip_status() == "empty" then
-        caption = "clipboard empty — esc, select a line, then F2 again"
+        -- The whole selection, wrapped, sitting right above the field — not a
+        -- one-line snippet. Height is content-sized (capped) so the field stays
+        -- put; a 2-column indent box carries the same left margin to every
+        -- wrapped line.
+        children[#children + 1] = { type = "text", len = 1, text = theme.dim("  on:") }
+        local cols = math.max(1, ctx.width - 4)
+        local cap = math.max(1, math.min(QUOTE_MAX_ROWS, (ctx.height or 24) - 6))
+        children[#children + 1] = {
+          type = "box",
+          axis = "horizontal",
+          len = quote_rows(quote, cols, cap),
+          children = {
+            { type = "text", len = 2, text = "" },
+            {
+              type = "text",
+              fill = 1,
+              wrap = true,
+              text = { { { text = quote, style = { fg = theme.accent } } } },
+            },
+          },
+        }
       else
-        caption = "reading clipboard…"
+        local caption
+        if not run and type(state.clip_key) == "string" then
+          caption = "grant 'run' (Ctrl+, → ] → t) to read the clipboard"
+        elseif clip_status() == "empty" then
+          caption = "clipboard empty — esc, select a line, then F2 again"
+        else
+          caption = "reading clipboard…"
+        end
+        children[#children + 1] = { type = "text", len = 1, text = theme.dim("  " .. caption) }
       end
-      children[#children + 1] = { type = "text", text = theme.dim("  " .. caption) }
       local field = state.field or textinput.new("")
       children[#children + 1] = {
         type = "box",
@@ -294,7 +333,7 @@ return {
         hint = sel and ('press F2 to comment on "' .. snippet(sel, ctx.width) .. '"')
           or "select a line in the agent, then press F2 to comment on it"
       end
-      children[#children + 1] = { type = "text", text = theme.dim("  " .. hint) }
+      children[#children + 1] = { type = "text", len = 1, text = theme.dim("  " .. hint) }
     end
 
     for i, note in ipairs(list) do
@@ -304,6 +343,7 @@ return {
       local class_fg = theme[CLASS_ROLE[note.class or "note"]] or theme.text
       children[#children + 1] = {
         type = "text",
+        len = 1,
         text = {
           {
             {
@@ -319,6 +359,7 @@ return {
       }
       children[#children + 1] = {
         type = "text",
+        len = 1,
         text = { { { text = "     " .. note.comment, style = { fg = theme.text } } } },
       }
     end
@@ -327,11 +368,13 @@ return {
     if view == "archived" then
       children[#children + 1] = {
         type = "text",
+        len = 1,
         text = theme.dim("  j/k move · u restore · x delete · Tab review"),
       }
     elseif #list > 0 then
       children[#children + 1] = {
         type = "text",
+        len = 1,
         text = theme.dim(
           "  F2 comment · j/k move · c class · x del · a archive · Tab archive · E send"
         ),
