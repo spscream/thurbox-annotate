@@ -41,16 +41,56 @@ CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/thurbox-annotate
 mkdir -p "$CACHE"
 doc="$CACHE/review-$uuid.md"
 
-cap=$(thurbox-cli session capture "$uuid" --lines 400 --text 2>/dev/null || true)
-[ -n "$cap" ] || cap="(could not capture the output of session $uuid)"
+# Prefer the agent's actual last reply — clean Markdown read from its transcript
+# — the way herdr-annotate's own "review the agent's last reply" (annotate.last)
+# does. plannotator-tui is a Markdown annotator: a rendered-screen scrape comes
+# out as fragmented code blocks, while a real reply renders as itself. thurbox
+# names the agent and its session id, which is exactly what `plannotator-tui
+# last` needs to read the right transcript.
+meta=$(thurbox-cli session get "$uuid" --json 2>/dev/null || true)
+field() {
+  [ -n "$meta" ] || return 0
+  printf '%s' "$meta" |
+    python3 -c "import sys,json; print(json.load(sys.stdin).get('$1') or '')" 2>/dev/null || true
+}
+remote=$(field remote_host)
+session_id=$(field agent_session_id)
+# The agent thurbox thinks is here, mapped to a host plannotator knows how to
+# read. `reports_as`/`detected_agent` win over the configured name, since a
+# session may run claude under a custom agent label.
+host=""
+for candidate in "$(field reports_as)" "$(field detected_agent)" "$(field agent)"; do
+  lower=$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in
+  claude | codex | pi | omp | copilot | droid | hermes | opencode)
+    host="$lower"
+    break
+    ;;
+  esac
+done
+
+# Read the reply only for a local session whose agent plannotator knows and
+# whose transcript exists yet; anything else falls back to the screen.
+reply=""
+if [ -z "$remote" ] && [ -n "$host" ] && [ -n "$session_id" ]; then
+  reply=$(plannotator-tui last --host "$host" --session-id "$session_id" --print 2>/dev/null || true)
+fi
 
 {
   printf '# Review — %s\n\n' "$label"
   printf 'Drag to select a line, comment, then press E to send the numbered feedback back to this agent.\n\n'
-  # An indented code block, not a fenced one: the captured screen may itself
-  # contain ``` and would break a fence. Four-space indent keeps every line on
-  # its own row so a line is selectable, and survives any content.
-  printf '%s\n' "$cap" | sed 's/^/    /'
+  if [ -n "$reply" ]; then
+    # Already Markdown — pass the agent's reply through untouched.
+    printf '%s\n' "$reply"
+  else
+    # No transcript to read (a shell agent, a remote session, or one that has
+    # not replied yet): fall back to the rendered screen. An indented code
+    # block, not a fenced one — the screen may itself contain ``` and would
+    # break a fence; four-space indent keeps every line selectable.
+    cap=$(thurbox-cli session capture "$uuid" --lines 400 --text 2>/dev/null || true)
+    [ -n "$cap" ] || cap="(could not read this session's last reply or capture its screen)"
+    printf '%s\n' "$cap" | sed 's/^/    /'
+  fi
 } >"$doc"
 
 export HERDR_ENV=1
