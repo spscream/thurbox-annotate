@@ -14,6 +14,11 @@ a line, comment on it, and press `E`. The comments are delivered straight back
 into that agent's composer as a numbered list — as if you had typed the review
 yourself.
 
+![Reviewing a stub agent's plan and sending the feedback back](media/demo.gif)
+
+*`F5` opens the review, `c` comments on the flawed line, `E` sends it — and the
+numbered feedback lands in the agent's composer, which echoes it straight back.*
+
 | Pane | Slot | What it draws |
 |---|---|---|
 | `plugins/40_annotate.lua` | `center` (switch) | A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
