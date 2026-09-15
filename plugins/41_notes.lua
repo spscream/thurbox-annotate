@@ -148,9 +148,14 @@ return {
   pills = { { action = "notes.open", label = "Notes", priority = 15 } },
 
   keys = {
-    -- Global so it fires from the focused agent, where the selection is made.
+    -- Global so it fires from the focused agent, where the selection is made,
+    -- and an F-key (not `ctrl+<letter>`) for the reason the agent pane's own
+    -- F-keys are: a focused terminal keeps the bare letter chords for the
+    -- program inside it. F2 because the rest of the strip is taken — F5 is the
+    -- Full review, F7 the editor tab, F8 the shell, F9 the sessions editor, and
+    -- F1/F4/F6 are the kernel's.
     {
-      key = "f7",
+      key = "f2",
       action = "notes.comment",
       desc = "comment on the selection",
       scope = "global",
@@ -206,8 +211,8 @@ return {
         hint = "no archived notes — Tab returns to the review"
       else
         local sel = selection()
-        hint = sel and ('press F7 to comment on "' .. snippet(sel, ctx.width) .. '"')
-          or "select a line in the agent, then press F7 to comment on it"
+        hint = sel and ('press F2 to comment on "' .. snippet(sel, ctx.width) .. '"')
+          or "select a line in the agent, then press F2 to comment on it"
       end
       children[#children + 1] = { type = "text", text = theme.dim("  " .. hint) }
     end
@@ -248,7 +253,7 @@ return {
       children[#children + 1] = {
         type = "text",
         text = theme.dim(
-          "  F7 comment · j/k move · c class · x del · a archive · Tab archive · E send"
+          "  F2 comment · j/k move · c class · x del · a archive · Tab archive · E send"
         ),
       }
     end
@@ -401,7 +406,7 @@ return {
       local sel = selection()
       if not sel then
         command("message", {
-          text = "notes: select a line in the agent first, then press F7",
+          text = "notes: select a line in the agent first, then press F2",
           level = "error",
         })
         return true

@@ -14,7 +14,7 @@ idea, wired into thurbox's own panes. It comes in two tiers, like herdr:
   straight back into that agent's composer as a numbered list — as if you had
   typed the review yourself.
 - **Lite** — no external program. Drag to select a line in the agent, press
-  `F7`, type a comment; repeat to build a list, then send it all back with `E`.
+  `F2`, type a comment; repeat to build a list, then send it all back with `E`.
   A single small pane, entirely in Lua.
 
 Either tier delivers the same thing: a numbered review typed into the agent's
@@ -29,7 +29,7 @@ numbered feedback lands in the agent's composer, which echoes it straight back.*
 | Pane | Slot | What it draws |
 |---|---|---|
 | `plugins/40_annotate.lua` | `center` (switch) | **Full tier.** A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
-| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the mouse selection, a comment on it, an accumulating list you classify (`c`), delete (`x`) and archive (`a`/`Tab`/`u`). Comment on the selection with `F7` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
+| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the mouse selection, a comment on it, an accumulating list you classify (`c`), delete (`x`) and archive (`a`/`Tab`/`u`). Comment on the selection with `F2` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
 
 Both share the `center` slot with the agent pane and draw nothing until you bring
 one forward, so they add no column and need **no `layout.lua` edit**. Install
@@ -99,7 +99,7 @@ thurbox-cli plugin install git+https://github.com/spscream/thurbox-annotate --as
 Then:
 
 1. Drag to select a line of the agent's output.
-2. Press `F7` — the pane comes forward with that line quoted and a comment
+2. Press `F2` — the pane comes forward with that line quoted and a comment
    field. Type the comment, press `Enter` to save it. The chord is global, so it
    fires while the agent is focused; the selection is grabbed at the keypress.
 3. Repeat to build the list, then manage it — a cursor moves with `j`/`k`; `c`
@@ -114,7 +114,7 @@ Then:
 **Requires a thurbox that publishes the selection.** The pane reads the mouse
 selection from the shared store key `selection.text`. Stock thurbox keeps the
 selection only for its own copy, so on an unpatched build the selection is always
-empty and `F7` has nothing to quote. The one-line kernel change that exposes it
+empty and `F2` has nothing to quote. The one-line kernel change that exposes it
 (`feat(core): mirror the text selection into the shared store for Lua panes`)
 lives on the fork and is not yet upstream; the Full tier needs no such change.
 
