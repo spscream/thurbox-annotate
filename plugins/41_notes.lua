@@ -90,11 +90,26 @@ local CLIP_CMD = table.concat({
   "pbpaste 2>/dev/null",
 }, " || ")
 
---- Normalise clipboard text: CRLF from a Windows tool to LF, and no surrounding
---- blank — `Get-Clipboard` hands back a trailing newline.
-local function clip_text(s)
+--- Normalise a captured block while KEEPING its shape: CRLF to LF, trailing
+--- whitespace off each line (terminal cells copy padded, and that padding is not
+--- structure), and surrounding blank lines dropped. Leading indentation is left
+--- alone — it is the formatting the delivered feedback is meant to preserve, so a
+--- code selection reaches the agent still indented. `Get-Clipboard`'s trailing
+--- newline goes with the outer-blank trim.
+local function normalize_block(s)
   s = (s or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
-  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+  s = s:gsub("[ \t]+\n", "\n"):gsub("[ \t]+$", "")
+  return (s:gsub("^\n+", ""):gsub("\n+$", ""))
+end
+
+--- A fenced-block delimiter that cannot be closed early by the quote's own
+--- content: one backtick longer than the longest backtick run inside it, floor 3.
+local function fence_for(s)
+  local longest = 0
+  for run in s:gmatch("`+") do
+    longest = math.max(longest, #run)
+  end
+  return string.rep("`", math.max(3, longest + 1))
 end
 
 --- The clipboard read for the compose in flight, as one of: "off" (none in
@@ -117,7 +132,7 @@ local function clip_status()
   if not answer.ok then
     return "empty"
   end
-  local text = clip_text(answer.stdout)
+  local text = normalize_block(answer.stdout)
   return text ~= "" and text or "empty"
 end
 
@@ -186,13 +201,26 @@ end
 
 --- The accumulated notes as numbered feedback for a composer. Plain text, since
 --- that is what lands in the agent — each note is the classified quote and the
---- comment under it.
+--- comment under it. The quote keeps its shape: a single line stays inline after
+--- `>`, a multi-line selection travels verbatim inside a fenced block, so line
+--- breaks and indentation reach the agent as selected instead of collapsing to
+--- one line.
 local function to_feedback(notes)
   local out = { "Review notes:", "" }
   for i, note in ipairs(notes) do
-    local quote = (note.quote:gsub("%s+", " ")):gsub("^%s+", "")
+    local quote = normalize_block(note.quote)
     local label = CLASS_LABEL[note.class or "note"] or "Note"
-    out[#out + 1] = i .. ". [" .. label .. "] > " .. quote
+    if quote:find("\n") then
+      out[#out + 1] = i .. ". [" .. label .. "]"
+      local fence = fence_for(quote)
+      out[#out + 1] = fence
+      for line in (quote .. "\n"):gmatch("(.-)\n") do
+        out[#out + 1] = line
+      end
+      out[#out + 1] = fence
+    else
+      out[#out + 1] = i .. ". [" .. label .. "] > " .. quote
+    end
     out[#out + 1] = "   " .. note.comment
     out[#out + 1] = ""
   end

@@ -108,7 +108,10 @@ Then:
    `Ctrl+B M` manager, minus the clipboard export the Lua sandbox cannot reach.
 4. Press `E` — the active notes are typed into the selected session's composer
    as numbered, classified feedback (`[Issue] > quote`), the same delivery the
-   Full tier uses. The archive stays behind; only the review is sent.
+   Full tier uses. A single-line quote stays inline after `>`; a multi-line
+   selection travels verbatim in a fenced block, so its line breaks and
+   indentation reach the agent as selected. The archive stays behind; only the
+   review is sent.
 
 ### Where the selected text comes from
 
