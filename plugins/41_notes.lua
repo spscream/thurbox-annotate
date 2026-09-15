@@ -137,14 +137,14 @@ end
 
 --- One line of a quote, trimmed and shortened — a note points at a line, and the
 --- pane has one row to remind you which. The full quote still travels in the
---- delivered feedback.
+--- delivered feedback. Cutting is delegated to `widgets.truncate`: it measures in
+--- columns with the painter's own `unicode-width` and never splits a codepoint,
+--- where a byte-wise `line:sub(1, limit)` would leave half a Cyrillic letter — a
+--- stray `�` at the cut.
 local function snippet(quote, width)
   local line = (quote:gsub("%s+", " ")):gsub("^%s+", "")
   local limit = math.max(8, (width or 40) - 8)
-  if widgets.chars(line) > limit then
-    line = line:sub(1, limit) .. "…"
-  end
-  return line
+  return widgets.truncate(line, limit)
 end
 
 --- Which list the cursor is over, and its name — `state` is deserialised on each
