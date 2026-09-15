@@ -58,7 +58,7 @@ return {
 
   keys = {
     {
-      key = "f4",
+      key = "f5",
       action = "annotate.open",
       desc = "review the agent output",
       scope = "global",
@@ -92,7 +92,7 @@ return {
       )
     end
     if not state.open then
-      return message("Review", ctx, "press F4 to review the focused agent's output")
+      return message("Review", ctx, "press F5 to review the focused agent's output")
     end
     local session = target()
     if not session then

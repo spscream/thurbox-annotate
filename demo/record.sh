@@ -89,41 +89,45 @@ snap 0-boot
 # ── Trust the pane ──────────────────────────────────────────────────────────
 # `program`, pressed rather than seeded: this is thurbox's own flow — F6, ] for
 # the Interface tab, `t` on the pane — and it is in the recording because a pane
-# you have not trusted draws a different thing. The number of `j` steps to reach
-# the annotate row is calibrated from SNAP (see 1-interface).
+# you have not trusted draws a different thing. The cursor starts on the first
+# row (65_search); the annotate row is six below it — 65_search, 10_sessions,
+# 20_agent, 60_confirm, 70_new_session, 80_restore, then annotate — so six `j`
+# steps land on it. Calibrated from SNAP 1-interface; if the shipped pane list
+# changes, that snap is where the miss shows.
 k F6 1.5
 k "]" 1.2
 snap 1-interface
-k j 0.4
+for _ in 1 2 3 4 5 6; do k j 0.2; done
+snap 2-on-annotate-row
 k t 1.2
-snap 2-trusted
+snap 3-trusted
 k Escape 2
 
 # ── Open the review ─────────────────────────────────────────────────────────
-# F4 brings the review pane forward and starts plannotator-tui on the selected
+# F5 brings the review pane forward and starts plannotator-tui on the selected
 # session's captured output.
-k F4 3
-snap 3-review-open
+k F5 3
+snap 4-review-open
 
 # ── Annotate ────────────────────────────────────────────────────────────────
 # j to the code block (heading, instruction, then the captured plan), c to
 # comment on it, type the note, submit.
 k j 0.6
 k j 1.0
-snap 4-block
+snap 5-block
 k c 1.0
-snap 5-comment-open
+snap 6-comment-open
 type "step 2: input.len() counts bytes, not columns — use unicode-width" 0.8
 k Enter 1.5
-snap 6-comment-made
+snap 7-comment-made
 
 # ── Send it back to the agent ───────────────────────────────────────────────
 k E 2
-snap 7-sent
+snap 8-sent
 
 # Close the review; the agent pane received the feedback through `session send`.
-k F4 2.5
-snap 8-delivered
+k F5 2.5
+snap 9-delivered
 
 # A beat on the result before quitting: the last frame of a looping GIF is on
 # screen as long as the first.

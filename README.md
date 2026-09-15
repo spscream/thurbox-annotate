@@ -16,7 +16,7 @@ yourself.
 
 | Pane | Slot | What it draws |
 |---|---|---|
-| `plugins/40_annotate.lua` | `center` (switch) | A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F4`; delivers feedback with `session send`. |
+| `plugins/40_annotate.lua` | `center` (switch) | A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
 
 It shares the `center` slot with the agent pane and draws nothing until you bring
 it forward, so it adds no column and needs **no `layout.lua` edit**.
@@ -67,11 +67,11 @@ of a terminal.
 ## Use
 
 1. Select a session in the list.
-2. Press `F4` (or its **Review** pill) — plannotator-tui opens on that agent's
+2. Press `F5` (or its **Review** pill) — plannotator-tui opens on that agent's
    captured output.
 3. Drag to select a line, comment, repeat.
 4. Press `E` — the numbered feedback lands in that agent's composer.
-5. `F4` again closes the review and hands focus back.
+5. `F5` again closes the review and hands focus back.
 
 ## Checks
 

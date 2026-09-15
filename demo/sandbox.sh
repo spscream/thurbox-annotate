@@ -44,6 +44,18 @@ export TMUX_TMPDIR="$S/tmux"
 unset THURBOX_CONFIG_DIR THURBOX_DATA_DIR
 mkdir -p "$XDG_CONFIG_HOME/thurbox" "$XDG_DATA_HOME/thurbox" "$TMUX_TMPDIR"
 
+# The sandbox runs whatever thurbox is on PATH — the user's own binary. Its
+# auto-update installs a new release over `current_exe()`, which is that real
+# binary, NOT anything under this throwaway HOME: a recording would silently
+# replace the user's install. Both switches off, so the run makes no network
+# call and touches no binary, and the header carries no "update available" badge
+# to distract from the pane.
+cat >"$XDG_CONFIG_HOME/thurbox/settings.toml" <<'SETTINGS'
+[features]
+auto_update = false
+version_check = false
+SETTINGS
+
 # A stub agent that behaves like one worth reviewing: it prints a short plan with
 # a deliberate flaw (step 2 measures bytes, not columns), then reads its stdin
 # and echoes what arrives — so when the review is delivered with `session send`,
