@@ -162,12 +162,6 @@ local function snippet(quote, width)
   return widgets.truncate(line, limit)
 end
 
---- Ceiling on how many quote lines the compose view shows before it spends the
---- last row on a "+N more" count — so a large paste cannot push the comment field
---- off-screen. Only the preview is bounded; the whole quote is stored and
---- delivered. Clamped again to the pane height at render.
-local QUOTE_MAX_ROWS = 8
-
 --- Which list the cursor is over, and its name — `state` is deserialised on each
 --- read, so callers take the returned list, mutate it, and write it BACK under
 --- the returned key (see the write-back trap the whole pane is careful about).
@@ -283,7 +277,12 @@ return {
     local archived = state.archived or {}
     local title = view == "archived" and ("Archived · " .. #archived)
       or (#list > 0 and ("Notes · " .. #list) or "Notes")
-    local children = { { type = "text", len = 1, text = "" } }
+    local children = {}
+    -- A leading blank for the list views; compose skips it so the quote gets that
+    -- row too — on a short pane every row of code counts.
+    if not state.composing then
+      children[#children + 1] = { type = "text", len = 1, text = "" }
+    end
 
     if state.composing then
       local quote = pending_quote()
@@ -295,7 +294,10 @@ return {
         -- large paste cannot push the field off-screen — the whole quote is still
         -- stored and delivered — with the last row spent on a count of the rest.
         children[#children + 1] = { type = "text", len = 1, text = theme.dim("  on:") }
-        local cap = math.max(1, math.min(QUOTE_MAX_ROWS, (ctx.height or 24) - 6))
+        -- Fill the pane: the quote takes every row left after the frame (2), the
+        -- `on:` label (1) and the field (1). No artificial ceiling — a taller pane
+        -- shows more. On overflow the last of these rows is the "+N more" count.
+        local cap = math.max(1, (ctx.height or 24) - 4)
         local lines = {}
         for line in (normalize_block(quote) .. "\n"):gmatch("(.-)\n") do
           lines[#lines + 1] = line
@@ -345,7 +347,6 @@ return {
           },
         },
       }
-      children[#children + 1] = { type = "text", len = 1, text = "" }
     end
 
     if #list == 0 and not state.composing then
