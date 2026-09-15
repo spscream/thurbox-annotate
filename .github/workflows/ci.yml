@@ -19,7 +19,7 @@ on:
 # and the `ui/` tree it loads have to be the same version: a pane reads
 # `thurbox.*`, and that is a contract that moves.
 env:
-  THURBOX_TAG: v2.22.4
+  THURBOX_TAG: v2.25.0
 
 jobs:
   lint:

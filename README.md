@@ -1,7 +1,7 @@
 # thurbox-annotate
 
 [![CI](https://github.com/spscream/thurbox-annotate/actions/workflows/ci.yml/badge.svg)](https://github.com/spscream/thurbox-annotate/actions/workflows/ci.yml)
-[![thurbox v2.22.4](https://img.shields.io/badge/thurbox-v2.22.4-2aa198)](https://github.com/Thurbeen/thurbox/releases/tag/v2.22.4)
+[![thurbox v2.25.0](https://img.shields.io/badge/thurbox-v2.25.0-2aa198)](https://github.com/Thurbeen/thurbox/releases/tag/v2.25.0)
 [![licence MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 Review a coding agent's output inside [thurbox](https://github.com/Thurbeen/thurbox)
@@ -111,12 +111,11 @@ Then:
    as numbered, classified feedback (`[Issue] > quote`), the same delivery the
    Full tier uses. The archive stays behind; only the review is sent.
 
-**Requires a thurbox that publishes the selection.** The pane reads the mouse
-selection from the shared store key `selection.text`. Stock thurbox keeps the
-selection only for its own copy, so on an unpatched build the selection is always
-empty and `F2` has nothing to quote. The one-line kernel change that exposes it
-(`feat(core): mirror the text selection into the shared store for Lua panes`)
-lives on the fork and is not yet upstream; the Full tier needs no such change.
+**Requires thurbox ≥ v2.25.0.** The pane reads the mouse selection from the
+published `thurbox.selection` field. Earlier thurbox kept the selection only for
+its own copy, so on an older build the field is always empty and `F2` has nothing
+to quote — the kernel change that exposes it landed in v2.25.0 ([#1151](https://github.com/Thurbeen/thurbox/pull/1151)).
+The Full tier needs no such support.
 
 ## Checks
 
@@ -131,7 +130,7 @@ lives on the fork and is not yet upstream; the Full tier needs no such change.
 Both run against the release named by `THURBOX_TAG` in the workflow. Locally:
 
 ```bash
-git clone --depth 1 --branch v2.22.4 https://github.com/Thurbeen/thurbox .thurbox
+git clone --depth 1 --branch v2.25.0 https://github.com/Thurbeen/thurbox .thurbox
 cp .thurbox/thurbox.yml .          # what selene.toml's `std = "thurbox"` resolves to
 selene plugins && stylua --check plugins && shellcheck bin/*.sh scripts/*.sh
 ci/assemble-interface.sh .thurbox build/ui

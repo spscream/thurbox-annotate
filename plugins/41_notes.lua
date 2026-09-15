@@ -2,12 +2,12 @@
 -- accumulated notes back to the focused session as numbered feedback — no
 -- external binary, entirely in Lua.
 --
--- The selection reaches Lua through the shared store key `selection.text`, which
--- the kernel publishes each frame (a small fork change beside `copy_selection`).
--- The comment chord is GLOBAL so it fires while the agent is focused; it grabs
--- the selection at press time — the store still holds last frame's value even
--- though that same keypress clears the live selection — so the agent may then be
--- hidden behind this pane while you type the comment.
+-- The selection reaches Lua through `thurbox.selection`, the published field the
+-- kernel refreshes each frame (upstream since thurbox v2.25.0). The comment chord
+-- is GLOBAL so it fires while the agent is focused; it grabs the selection at
+-- press time — the field still carries the finished selection even though that
+-- same keypress clears the live one — so the agent may then be hidden behind this
+-- pane while you type the comment.
 --
 -- Delivery is `command("send")`, the same route the agent's composer receives a
 -- prompt on, so a real agent reads the review as if you had typed it. No
@@ -23,7 +23,6 @@ local widgets = require("lib.widgets")
 local textinput = require("lib.textinput")
 
 local NAME = "notes"
-local SELECTION = "selection.text"
 
 --- The classifications a note can carry, in cycle order, with `note` the
 --- default — the same set herdr-annotate and thurbox-code-review use.
@@ -59,9 +58,9 @@ local function target()
 end
 
 --- The current mouse selection, or nil when nothing is selected. Read from the
---- shared store, where the kernel mirrors it every frame.
+--- published `thurbox.selection` field, which the kernel refreshes every frame.
 local function selection()
-  local text = store[SELECTION]
+  local text = thurbox and thurbox.selection
   if type(text) == "string" and text:gsub("%s", "") ~= "" then
     return text
   end
