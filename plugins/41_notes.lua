@@ -1,17 +1,25 @@
--- thurbox-annotate (Lite tier): comment on the mouse text selection and send the
--- accumulated notes back to the focused session as numbered feedback — no
--- external binary, entirely in Lua.
+-- thurbox-annotate (Lite tier): comment on the selected line of an agent's output
+-- and send the accumulated notes back to the focused session as numbered
+-- feedback — no external binary, entirely in Lua.
 --
--- The selection reaches Lua through `thurbox.selection`, the published field the
--- kernel refreshes each frame (upstream since thurbox v2.25.0). The comment chord
--- is GLOBAL so it fires while the agent is focused; it grabs the selection at
--- press time — the field still carries the finished selection even though that
--- same keypress clears the live one — so the agent may then be hidden behind this
--- pane while you type the comment.
+-- Getting the selected text takes two channels, the way herdr-annotate does:
+--   1. `thurbox.selection`, the field the kernel publishes (upstream since
+--      v2.25.0) for a selection THURBOX itself made — a plain shell or any pane
+--      not tracking the mouse. Instant, no capability.
+--   2. The system clipboard, for a selection the FOCUSED PROGRAM made. A mouse
+--      drag over a tracking agent (Claude Code) is forwarded to that program, so
+--      thurbox never sees the selection — but the agent's own copy-on-select has
+--      put the text on the clipboard, which is exactly what herdr-annotate reads.
+--      We read it with `run` (needs the `run` capability, granted per file in
+--      settings) via the platform's clipboard tool. This channel is ASYNC: the
+--      answer lands a frame or two after F2, so the compose row says "reading
+--      clipboard…" until it does.
+-- The chord is GLOBAL so it fires while the agent is focused; channel 1 is grabbed
+-- at press time, channel 2 is kicked off then and read back as it arrives — so the
+-- agent may be hidden behind this pane by the time you type the comment.
 --
 -- Delivery is `command("send")`, the same route the agent's composer receives a
--- prompt on, so a real agent reads the review as if you had typed it. No
--- capability is needed: unlike the Full tier there is no external program to run.
+-- prompt on, so a real agent reads the review as if you had typed it.
 --
 -- The list is a small manager, mirroring herdr-annotate's `Ctrl+B M`: a cursor
 -- (j/k) selects a note, `c` cycles its classification, `x` deletes it, `a`
@@ -59,12 +67,70 @@ end
 
 --- The current mouse selection, or nil when nothing is selected. Read from the
 --- published `thurbox.selection` field, which the kernel refreshes every frame.
+--- This is channel 1: only a selection thurbox itself made lands here.
 local function selection()
   local text = thurbox and thurbox.selection
   if type(text) == "string" and text:gsub("%s", "") ~= "" then
     return text
   end
   return nil
+end
+
+--- Read the system clipboard — channel 2. herdr-annotate reads this same source;
+--- only the tool differs by platform, so try them in order and take the first
+--- that answers: PowerShell under WSL/Windows, wl-paste on Wayland, xclip/xsel on
+--- X11, pbpaste on macOS. A missing tool exits non-zero and the next one runs.
+local CLIP_CMD = table.concat({
+  "powershell.exe -NoProfile -Command Get-Clipboard 2>/dev/null",
+  "wl-paste --no-newline 2>/dev/null",
+  "xclip -selection clipboard -o 2>/dev/null",
+  "xsel -b 2>/dev/null",
+  "pbpaste 2>/dev/null",
+}, " || ")
+
+--- Normalise clipboard text: CRLF from a Windows tool to LF, and no surrounding
+--- blank — `Get-Clipboard` hands back a trailing newline.
+local function clip_text(s)
+  s = (s or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+--- The clipboard read for the compose in flight, as one of: "off" (none in
+--- flight — channel 1 supplied the quote), "waiting" (kicked off, not answered),
+--- "empty" (answered with nothing usable) or the captured text. `run` is only
+--- ASKED here — nothing is written — so the pane stays `pure`; asking every frame
+--- is how the answer is read back (README: "Asking every frame is correct").
+local function clip_status()
+  local key = state.clip_key
+  if type(key) ~= "string" then
+    return "off"
+  end
+  if run and type(state.clip_session) == "string" then
+    run(key, CLIP_CMD, { session = state.clip_session, ttl = 3600 })
+  end
+  local answer = (thurbox.runs or {})[key]
+  if not answer or answer.state ~= "done" then
+    return "waiting"
+  end
+  if not answer.ok then
+    return "empty"
+  end
+  local text = clip_text(answer.stdout)
+  return text ~= "" and text or "empty"
+end
+
+--- The quote for the compose in flight: channel 1's instant selection if we had
+--- one, else channel 2's clipboard once it is in. nil while the clipboard read is
+--- still out or came back empty — so a note is never saved pointing at nothing.
+local function pending_quote()
+  if type(state.pending_quote) == "string" and state.pending_quote ~= "" then
+    return state.pending_quote
+  end
+  local clip = clip_status()
+  if clip == "off" or clip == "waiting" or clip == "empty" then
+    return nil
+  end
+  return clip
 end
 
 --- One line of a quote, trimmed and shortened — a note points at a line, and the
@@ -143,6 +209,11 @@ return {
   focusable = true,
   pure = true,
 
+  -- For channel 2 only: reading the system clipboard when the focused program,
+  -- not thurbox, made the selection. Channel 1 needs nothing; until the user
+  -- grants this, `run` is nil and the pane says so instead of reading.
+  capabilities = { "run" },
+
   -- Brought forward by its pill or its chord, like the Full pane beside it.
   pills = { { action = "notes.open", label = "Notes", priority = 15 } },
 
@@ -179,10 +250,18 @@ return {
     local children = { { type = "text", len = 1, text = "" } }
 
     if state.composing then
-      children[#children + 1] = {
-        type = "text",
-        text = theme.dim('  on "' .. snippet(state.pending_quote or "", ctx.width) .. '"'),
-      }
+      local quote = pending_quote()
+      local caption
+      if quote then
+        caption = 'on "' .. snippet(quote, ctx.width) .. '"'
+      elseif not run and type(state.clip_key) == "string" then
+        caption = "grant 'run' (Ctrl+, → ] → t) to read the clipboard"
+      elseif clip_status() == "empty" then
+        caption = "clipboard empty — esc, select a line, then F2 again"
+      else
+        caption = "reading clipboard…"
+      end
+      children[#children + 1] = { type = "text", text = theme.dim("  " .. caption) }
       local field = state.field or textinput.new("")
       children[#children + 1] = {
         type = "box",
@@ -272,10 +351,20 @@ return {
       local field = state.field or textinput.new("")
       if key.key == "enter" then
         local comment = (field.value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        if comment ~= "" then
+        local quote = pending_quote()
+        if comment ~= "" and not quote then
+          -- The comment is ready but the quote is not: the clipboard read has
+          -- not landed, or came back empty. Hold the compose open and say why,
+          -- rather than save a note that points at nothing.
+          command("message", {
+            text = "notes: no selection captured yet — esc, select a line, then F2",
+            level = "error",
+          })
+          return true
+        end
+        if comment ~= "" and quote then
           local notes = state.notes or {}
-          notes[#notes + 1] =
-            { quote = state.pending_quote or "", comment = comment, class = "note" }
+          notes[#notes + 1] = { quote = quote, comment = comment, class = "note" }
           state.notes = notes
           state.view = "notes"
           state.cursor = #notes
@@ -283,12 +372,14 @@ return {
         state.composing = false
         state.field = textinput.new("")
         state.pending_quote = nil
+        state.clip_key = nil
         return true
       end
       if key.key == "esc" then
         state.composing = false
         state.field = textinput.new("")
         state.pending_quote = nil
+        state.clip_key = nil
         return true
       end
       textinput.key(field, key)
@@ -402,17 +493,45 @@ return {
 
     if action == "notes.comment" then
       command("focus", { text = NAME })
+      state.field = textinput.new("")
+      state.pending_quote = nil
+      state.clip_key = nil
+
+      -- Channel 1: a selection thurbox made itself (a non-tracking pane). Instant.
       local sel = selection()
-      if not sel then
+      if sel then
+        state.pending_quote = sel
+        state.composing = true
+        return true
+      end
+
+      -- Channel 2: the focused program made the selection and copied it (Claude
+      -- Code and the like). Read the clipboard — needs `run` granted and a
+      -- session to run it in.
+      if not run then
         command("message", {
-          text = "notes: select a line in the agent first, then press F2",
+          text = "notes: grant 'run' (Ctrl+, → ] → t) so Lite can read the clipboard, "
+            .. "or select in a non-tracking pane",
           level = "error",
         })
         return true
       end
-      state.pending_quote = sel
-      state.field = textinput.new("")
+      local session = store.selected
+      if type(session) ~= "string" then
+        command("message", {
+          text = "notes: select a session first, then a line in it, then F2",
+          level = "error",
+        })
+        return true
+      end
+      -- A fresh key per press (no os/random in the sandbox — a persisted counter)
+      -- so each F2 captures the clipboard anew instead of reusing a cached read.
+      state.clip_seq = (state.clip_seq or 0) + 1
+      state.clip_key = "clip:" .. state.clip_seq
+      state.clip_session = session
       state.composing = true
+      -- Kick it now so the read is already in flight by the first render.
+      run(state.clip_key, CLIP_CMD, { session = session, ttl = 3600 })
       return true
     end
 
@@ -425,6 +544,7 @@ return {
       state.notes = {}
       state.composing = false
       state.pending_quote = nil
+      state.clip_key = nil
       return true
     end
 

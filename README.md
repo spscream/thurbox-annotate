@@ -29,7 +29,7 @@ numbered feedback lands in the agent's composer, which echoes it straight back.*
 | Pane | Slot | What it draws |
 |---|---|---|
 | `plugins/40_annotate.lua` | `center` (switch) | **Full tier.** A program pane hosting plannotator-tui on the selected session's captured output. Brought forward by its **Review** pill or `F5`; delivers feedback with `session send`. |
-| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the mouse selection, a comment on it, an accumulating list you classify (`c`), delete (`x`) and archive (`a`/`Tab`/`u`). Comment on the selection with `F2` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
+| `plugins/41_notes.lua` | `center` (switch) | **Lite tier.** A notes pane: the selection (from `thurbox.selection`, or — over a tracking agent — the system clipboard, which needs the `run` capability), a comment on it, an accumulating list you classify (`c`), delete (`x`) and archive (`a`/`Tab`/`u`). Comment with `F2` (a global chord, so it fires from the focused agent); send the list with `E`. No external program. |
 
 Both share the `center` slot with the agent pane and draw nothing until you bring
 one forward, so they add no column and need **no `layout.lua` edit**. Install
@@ -89,8 +89,7 @@ of a terminal.
 
 ## Lite tier
 
-`plugins/41_notes.lua` is the whole tier — no binary, no capability. Install it
-the same way:
+`plugins/41_notes.lua` is the whole tier — no binary. Install it the same way:
 
 ```bash
 thurbox-cli plugin install git+https://github.com/spscream/thurbox-annotate --as plugins/41_notes.lua
@@ -111,11 +110,27 @@ Then:
    as numbered, classified feedback (`[Issue] > quote`), the same delivery the
    Full tier uses. The archive stays behind; only the review is sent.
 
-**Requires thurbox ≥ v2.25.0.** The pane reads the mouse selection from the
-published `thurbox.selection` field. Earlier thurbox kept the selection only for
-its own copy, so on an older build the field is always empty and `F2` has nothing
-to quote — the kernel change that exposes it landed in v2.25.0 ([#1151](https://github.com/Thurbeen/thurbox/pull/1151)).
-The Full tier needs no such support.
+### Where the selected text comes from
+
+Lite gets the quote through two channels, the way herdr-annotate does — because
+the same obstacle applies here: a pane cannot read another terminal program's
+selection state.
+
+- **What thurbox selected** arrives instantly through the published
+  `thurbox.selection` field (thurbox ≥ **v2.25.0**, [#1151](https://github.com/Thurbeen/thurbox/pull/1151)).
+  This is a drag over a pane that does *not* track the mouse — a plain shell,
+  static output. No capability, no wait.
+- **What the agent selected** arrives through the **system clipboard**. A mouse
+  drag over a tracking agent (Claude Code and the like) is forwarded to that
+  program, so thurbox never sees the selection — but the agent's own
+  copy-on-select has already put the text on the clipboard, and Lite reads it
+  from there, exactly as herdr-annotate does. This needs the **`run`
+  capability**: grant it per file in settings → Interface (`Ctrl+,` → `]` →
+  select **notes** → `t`). Until then `F2` over an agent says so. The read is
+  asynchronous, so the compose row shows `reading clipboard…` for a moment. The
+  clipboard tool is chosen by platform (PowerShell under WSL/Windows, `wl-paste`
+  / `xclip` / `xsel` on Linux, `pbpaste` on macOS); a remote session's clipboard
+  lives on the remote, the same limit herdr notes.
 
 ## Checks
 
