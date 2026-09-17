@@ -46,7 +46,9 @@ return {
   name = NAME,
   slot = "center",
   slot_mode = "switch",
-  order = 30,
+  -- 30 занимает thurbox-code-review — номер, зарезервированный под пейн ревью.
+  -- Этот пейн размечает вывод агента, а не дифф, и встаёт после notes/memory.
+  order = 33,
   focusable = true,
   -- Keys we do not declare go to plannotator-tui in the surface.
   input = "session",
@@ -54,7 +56,7 @@ return {
 
   -- Shares the `center` switch slot with the agent pane, so it draws nothing
   -- until brought forward: the action band offers this.
-  pills = { { action = "annotate.open", label = "Review", priority = 20 } },
+  pills = { { action = "annotate.open", label = "Annotate", priority = 20 } },
 
   keys = {
     {
@@ -86,17 +88,17 @@ return {
     local granted = (thurbox and thurbox.granted) or {}
     if not granted.program then
       return message(
-        "Review",
+        "Annotate",
         ctx,
         "trust this pane in settings → Interface → t for plannotator-tui"
       )
     end
     if not state.open then
-      return message("Review", ctx, "press F5 to review the focused agent's output")
+      return message("Annotate", ctx, "press F5 to review the focused agent's output")
     end
     local session = target()
     if not session then
-      return message("Review", ctx, "select a session to review first")
+      return message("Annotate", ctx, "select a session to review first")
     end
     -- Idempotent: asking again while it runs does nothing, so calling every
     -- frame is correct. The launcher lives beside this file in the cloned repo.
