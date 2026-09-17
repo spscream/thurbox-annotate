@@ -56,7 +56,7 @@ return {
 
   -- Shares the `center` switch slot with the agent pane, so it draws nothing
   -- until brought forward: the action band offers this.
-  pills = { { action = "annotate.open", label = "Annotate", priority = 20 } },
+  pills = { { action = "annotate.open", label = "Annotate", priority = 65 } },
 
   keys = {
     {

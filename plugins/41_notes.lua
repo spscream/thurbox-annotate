@@ -261,6 +261,18 @@ return {
       scope = "global",
       group = "UI",
     },
+    -- The action band DROPS a pill whose action no chord reaches
+    -- (`bands::entries`), so without this key the Notes button does not exist —
+    -- F2 reaches `notes.comment`, not `notes.open`. `alt+`, because every
+    -- F-key is taken and a terminal without the kitty protocol cannot tell
+    -- `ctrl+shift+n` from `ctrl+n`, which opens a session.
+    {
+      key = "alt+n",
+      action = "notes.open",
+      desc = "open the review notes",
+      scope = "global",
+      group = "UI",
+    },
   },
 
   commands = {
