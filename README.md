@@ -101,11 +101,18 @@ Then:
 2. Press `F2` — the pane comes forward with that line quoted and a comment
    field. Type the comment, press `Enter` to save it. The chord is global, so it
    fires while the agent is focused; the selection is grabbed at the keypress.
+   Long comments wrap and follow the caret vertically. Use `Shift+Enter` (or
+   `Alt+Enter`) for a line break, arrows to move, and `Escape` to cancel editing.
+   `F2` while editing returns to the previous pane and keeps the draft; `F2`
+   from that pane resumes it. `Enter` still saves the complete comment.
 3. Repeat to build the list, then manage it — a cursor moves with `j`/`k`; `c`
    cycles the selected note's classification (Issue / Suggestion / Note /
    Praise); `x` deletes it; `a` archives it and `Tab` shows the archive, where
    `u` restores. `d` clears the current list. This mirrors herdr-annotate's
    `Ctrl+B M` manager, minus the clipboard export the Lua sandbox cannot reach.
+   From either notes list, `Escape` or `F2` returns to the previous pane
+   (normally the agent). `Alt+N` opens/toggles the list without capturing a new
+   selection; use it to manage saved notes.
 4. Press `E` — the active notes are typed into the selected session's composer
    as numbered, classified feedback (`[Issue] > quote`), the same delivery the
    Full tier uses. A single-line quote stays inline after `>`; a multi-line
@@ -159,3 +166,26 @@ THURBOX_UI_DIR=$PWD/build/ui thurbox-cli plugin check
 
 MIT. plannotator-tui is a separate MIT project; this repository ships none of its
 code, only downloads its released binary.
+
+### Native editor regression check
+
+The test uses thurbox's LuaHost, real text-input library, node conversion and
+ratatui TestBackend, with synthetic text only. It asserts that the native caret
+is inside the editor and checks multiline/soft-wrap tails, Cyrillic, resize,
+navigation, save/cancel and the native focus-toggle commands emitted by the list.
+It does not drive a live terminal or prove a particular installed layout's focus
+history. In a disposable thurbox checkout at the CI tag:
+
+```sh
+ci/assemble-interface.sh "$THURBOX_CHECKOUT" build/ui
+cp tests/native_notes.rs "$THURBOX_CHECKOUT/tests/annotate_notes.rs"
+ANNOTATE_UI="$PWD/build/ui" cargo test --manifest-path "$THURBOX_CHECKOUT/Cargo.toml" \
+  --test annotate_notes -- --nocapture
+```
+
+After merge, update the installed `thurbox-annotate` entries using the normal
+`thurbox-cli plugin update` command, run `thurbox-cli plugin check`, then use
+`F10` if the watcher has not reloaded. Opening a PR alone does not update the
+running interface. To roll back, install the same plugin source pinned to the
+previous commit with the normal plugin installer; keep the existing grants and
+layout. Never edit the installed Git working copy or `plugins.lock` by hand.

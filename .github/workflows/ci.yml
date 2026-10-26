@@ -69,3 +69,9 @@ jobs:
           XDG_DATA_HOME: ${{ github.workspace }}/build/xdg-data
           THURBOX_UI_DIR: ${{ github.workspace }}/build/ui
         run: ./thurbox-cli plugin check --text
+
+      - name: Native editor regression
+        run: |
+          cp tests/native_notes.rs .thurbox/tests/annotate_notes.rs
+          ANNOTATE_UI="$PWD/build/ui" cargo test --manifest-path .thurbox/Cargo.toml \
+            --test annotate_notes -- --nocapture
