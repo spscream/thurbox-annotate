@@ -32,6 +32,66 @@ local textinput = require("lib.textinput")
 
 local NAME = "notes"
 
+-- Last resolved field width, used by visual up/down navigation between renders.
+local editor_width = 1
+
+-- Split only the presentation: the persisted field always holds the complete
+-- text and a character offset. Reserve a cell at each wrap for the end caret.
+local function visual_rows(field, width)
+  local rows = { { parts = {}, start = 0 } }
+  local row, col, caret_row, caret_col = 1, 0, 1, 0
+  local offset = 0
+  local function next_row(start)
+    rows[row].value = table.concat(rows[row].parts)
+    rows[#rows + 1] = { parts = {}, start = start }
+    row, col = #rows, 0
+  end
+  for _, code in utf8.codes(field.value or "") do
+    local ch = utf8.char(code)
+    local columns = widgets.len(ch)
+    if ch ~= "\n" and col + columns >= width and col > 0 then
+      next_row(offset)
+    end
+    if offset == field.cursor then
+      caret_row, caret_col = row, offset - rows[row].start
+    end
+    if ch == "\n" then
+      next_row(offset + 1)
+    else
+      rows[row].parts[#rows[row].parts + 1] = ch
+      col = col + columns
+    end
+    offset = offset + 1
+  end
+  if offset == field.cursor then
+    if col >= width then
+      next_row(offset)
+    end
+    caret_row, caret_col = row, offset - rows[row].start
+  end
+  rows[row].value = table.concat(rows[row].parts)
+  return rows, caret_row, caret_col
+end
+
+local function editor(field, width, height, focused)
+  editor_width = math.max(1, width)
+  local rows, caret_row, caret_col = visual_rows(field, editor_width)
+  local first = math.max(1, caret_row - height + 1)
+  local children = {}
+  for i = first, math.min(#rows, first + height - 1) do
+    children[#children + 1] = {
+      type = "input",
+      len = 1,
+      value = rows[i].value,
+      cursor = i == caret_row and caret_col or 0,
+      focused = focused and i == caret_row,
+      placeholder = #rows == 1 and "comment · enter saves · esc cancels" or "",
+      style = { fg = theme.text },
+    }
+  end
+  return { type = "box", fill = 1, children = children }
+end
+
 --- The classifications a note can carry, in cycle order, with `note` the
 --- default — the same set herdr-annotate and thurbox-code-review use.
 local CLASSES = { "issue", "suggestion", "note", "praise" }
@@ -257,7 +317,7 @@ return {
     {
       key = "f2",
       action = "notes.comment",
-      desc = "comment on the selection",
+      desc = "comment / return to the previous pane",
       scope = "global",
       group = "UI",
     },
@@ -298,7 +358,7 @@ return {
 
     if state.composing then
       local quote = pending_quote()
-      if quote then
+      if quote and (ctx.height or 24) >= 6 then
         -- The whole selection shown verbatim, line by line — breaks and
         -- indentation kept (a code selection reads as code), never reflowed the
         -- way `wrap` would. Each source line is its own row under a 2-column
@@ -306,17 +366,16 @@ return {
         -- large paste cannot push the field off-screen — the whole quote is still
         -- stored and delivered — with the last row spent on a count of the rest.
         children[#children + 1] = { type = "text", len = 1, text = theme.dim("  on:") }
-        -- Fill the pane: the quote takes every row left after the frame (2), the
-        -- `on:` label (1) and the field (1). No artificial ceiling — a taller pane
-        -- shows more. On overflow the last of these rows is the "+N more" count.
-        local cap = math.max(1, (ctx.height or 24) - 4)
+        -- Leave at least two thirds of the content height to the editor.
+        -- The quote is context; it must not push the current edit out of view.
+        local cap = math.max(0, math.floor(((ctx.height or 24) - 2) / 3) - 1)
         local lines = {}
         for line in (normalize_block(quote) .. "\n"):gmatch("(.-)\n") do
           lines[#lines + 1] = line
         end
         local shown, more = #lines, 0
         if shown > cap then
-          shown = math.max(1, cap - 1)
+          shown = math.max(0, cap - 1)
           more = #lines - shown
         end
         for j = 1, shown do
@@ -330,7 +389,7 @@ return {
           children[#children + 1] =
             { type = "text", len = 1, text = theme.dim("  … +" .. more .. " more line(s)") }
         end
-      else
+      elseif (ctx.height or 24) >= 6 then
         local caption
         if not run and type(state.clip_key) == "string" then
           caption = "grant 'run' (Ctrl+, → ] → t) to read the clipboard"
@@ -342,23 +401,17 @@ return {
         children[#children + 1] = { type = "text", len = 1, text = theme.dim("  " .. caption) }
       end
       local field = state.field or textinput.new("")
+      local height = math.max(1, (ctx.height or 24) - 2 - #children)
       children[#children + 1] = {
         type = "box",
         axis = "horizontal",
-        len = 1,
+        fill = 1,
         children = {
           { type = "text", len = 2, text = "  " },
-          {
-            type = "input",
-            fill = 1,
-            value = field.value or "",
-            cursor = field.cursor or 0,
-            placeholder = "comment · enter saves · esc cancels",
-            focused = true,
-            style = { fg = theme.text },
-          },
+          editor(field, math.max(1, (ctx.width or 40) - 4), height, ctx.focused),
         },
       }
+      return { type = "box", frame = widgets.panel(title, ctx.focused), children = children }
     end
 
     if #list == 0 and not state.composing then
@@ -367,8 +420,8 @@ return {
         hint = "no archived notes — Tab returns to the review"
       else
         local sel = selection()
-        hint = sel and ('press F2 to comment on "' .. snippet(sel, ctx.width) .. '"')
-          or "select a line in the agent, then press F2 to comment on it"
+        hint = sel and "Esc/F2 back · F2 there comments on the selection"
+          or "Esc/F2 agent · select a line there, then F2 to comment"
       end
       children[#children + 1] = { type = "text", len = 1, text = theme.dim("  " .. hint) }
     end
@@ -406,14 +459,14 @@ return {
       children[#children + 1] = {
         type = "text",
         len = 1,
-        text = theme.dim("  j/k move · u restore · x delete · Tab review"),
+        text = theme.dim("  Esc/F2 back · j/k move · u restore · x delete · Tab review"),
       }
     elseif #list > 0 then
       children[#children + 1] = {
         type = "text",
         len = 1,
         text = theme.dim(
-          "  F2 comment · j/k move · c class · x del · a archive · Tab archive · E send"
+          "  Esc/F2 back · j/k move · c class · x del · a archive · Tab archive · E send"
         ),
       }
     end
@@ -431,7 +484,7 @@ return {
       -- Read the field into a local, mutate that, then write it BACK: `state` is
       -- deserialised on each read, so a field mutated in place is silently lost.
       local field = state.field or textinput.new("")
-      if key.key == "enter" then
+      if key.key == "enter" and not key.shift and not key.alt then
         local comment = (field.value or ""):gsub("^%s+", ""):gsub("%s+$", "")
         local quote = pending_quote()
         if comment ~= "" and not quote then
@@ -464,8 +517,29 @@ return {
         state.clip_key = nil
         return true
       end
-      textinput.key(field, key)
+      if key.key == "up" or key.key == "down" then
+        local rows, row, column = visual_rows(field, editor_width)
+        local destination = math.max(1, math.min(#rows, row + (key.key == "up" and -1 or 1)))
+        local limit = widgets.chars(rows[destination].value)
+        -- A soft-wrap boundary belongs to the next row. Do not target that
+        -- ambiguous offset when moving onto the previous visual row.
+        if
+          rows[destination + 1] and rows[destination + 1].start == rows[destination].start + limit
+        then
+          limit = math.max(0, limit - 1)
+        end
+        field.cursor = rows[destination].start + math.min(column, limit)
+      elseif key.key == "enter" then
+        textinput.insert(field, "\n")
+      else
+        textinput.key(field, key)
+      end
       state.field = field
+      return true
+    end
+
+    if key.key == "esc" then
+      command("focus", { text = NAME, toggle = true })
       return true
     end
 
@@ -574,7 +648,14 @@ return {
     end
 
     if action == "notes.comment" then
+      if thurbox.focus == NAME then
+        command("focus", { text = NAME, toggle = true })
+        return true
+      end
       command("focus", { text = NAME })
+      if state.composing then
+        return true
+      end
       state.field = textinput.new("")
       state.pending_quote = nil
       state.clip_key = nil
